@@ -51,8 +51,8 @@ sudo apt update
 sudo apt install python3 python3-pip tcpdump tshark -y
 
 # Clone the repository
-git clone https://github.com/0vm/NetDeflect
-cd NetDeflect
+git clone https://github.com/MartinSAMP/PaintSecure
+cd PaintSecure
 
 # Install Python dependencies
 pip3 install psutil requests
@@ -67,8 +67,8 @@ sudo python3 netdeflect.py
 sudo yum install python3 python3-pip tcpdump wireshark-cli -y
 
 # Clone and setup
-git clone https://github.com/0vm/NetDeflect
-cd NetDeflect
+git clone https://github.com/MartinSAMP/PaintSecure
+cd PaintSecure
 pip3 install psutil requests
 
 # Run with sudo
@@ -538,5 +538,6 @@ This project is licensed under the MIT License - see the original NetDeflect rep
 
 
 **NetDeflect v2.5 - PaintSecure Edition** - Advanced DDoS Protection with AI-Powered Security 🎨🛡️
+
 
 *Modified by martin - Enhancing cybersecurity one packet at a time*
