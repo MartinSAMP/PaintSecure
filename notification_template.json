@@ -3,8 +3,8 @@
     "embeds": [
         {
             "title": "⚠️ DDoS Attack Mitigated: #{{attack_id}}",
-            "description": "PabloSecure detected and responded to a potential attack.",
-            "url": "https://protect.pablocloud.biz.id",
+            "description": "PaintSecure detected and responded to a potential attack.",
+            "url": "https://github.com/MartinSAMP",
             "color": 16734296,
             "fields": [
                 {
@@ -19,11 +19,11 @@
                 }
             ],
             "author": {
-                "name": "PabloSecure",
+                "name": "PaintSecure",
                 "icon_url": "https://avatars.githubusercontent.com/u/79897291?s=96&v=4"
             },
             "footer": {
-                "text": "protect.pablocloud.biz.id",
+                "text": "PaintSecure",
                 "icon_url": "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
             }
         }
