@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NetDeflect v2.5 - Advanced DDoS Protection System
+NetDeflect v2.5 - DDoS Protection System
 Enhanced with PaintSecure features including:
 - Multi-layer DDoS Protection
 - AI-Powered Threat Detection
