@@ -1,3 +1,18 @@
+#!/usr/bin/env python3
+"""
+NetDeflect v2.5 - Advanced DDoS Protection System
+Enhanced with PaintSecure features including:
+- Multi-layer DDoS Protection
+- AI-Powered Threat Detection
+- Behavioral Analysis Engine
+- Real-time Traffic Analysis
+- Adaptive Rate Limiting
+- Threat Intelligence Integration
+- Automated Pattern Learning
+
+Modified by martin
+"""
+
 # Terminal color definitions
 class TerminalColor:
     BLACK   = '\033[30m'
@@ -11,115 +26,158 @@ class TerminalColor:
     DARK_GRAY     = '\033[90m'
     PURPLE = '\033[35m'
     RESET  = '\033[0m'
+    BOLD   = '\033[1m'
+    UNDERLINE = '\033[4m'
+    BLINK  = '\033[5m'
+    REVERSE = '\033[7m'
 
 # Version information class
 class ApplicationVersion:
-  version = "NetDeflect v2.0"
+    version = "NetDeflect v2.5 - PaintSecure Edition"
+    build_date = "2024-01-01"
+    author = "mod by martin"
+    features = [
+        "Multi-layer DDoS Protection",
+        "AI-Powered Threat Detection",
+        "Behavioral Analysis Engine",
+        "Real-time Traffic Analysis",
+        "Adaptive Rate Limiting",
+        "Threat Intelligence Integration",
+        "Automated Pattern Learning"
+    ]
 
 try:
-  import os
-  import sys
-  import subprocess
-  from subprocess import DEVNULL, STDOUT
-  import json
-  import configparser
-  import re
-  from datetime import datetime
-  import requests
-  import psutil
-  import time
-  import socket
-  import threading
-except ImportError:
-  # Format current timestamp
-  def get_timestamp():
-    now = datetime.now()
-    timestamp = now.strftime("%d-%m-%y-%H:%M:%S")
-    return timestamp
-
-  # Exit application
-  exit()
+    import os
+    import sys
+    import subprocess
+    from subprocess import DEVNULL, STDOUT, PIPE
+    import json
+    import configparser
+    import re
+    from datetime import datetime, timedelta
+    import requests
+    import psutil
+    import time
+    import socket
+    import threading
+    import hashlib
+    import ipaddress
+    import random
+    import string
+    import math
+    from collections import defaultdict, deque, Counter
+    import pickle
+    import zlib
+    import base64
+    from typing import Dict, List, Tuple, Set, Optional, Any
+    import statistics
+    from dataclasses import dataclass, field
+    import hmac
+    import secrets
+    import logging
+    from logging.handlers import RotatingFileHandler
+    import ssl
+    import certifi
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import queue
+    import signal
+    import atexit
+    import inspect
+except ImportError as e:
+    print(f"Missing required module: {e}")
+    print("Install dependencies with: pip install -r requirements.txt")
+    exit(1)
 
 # Set recursion limit to handle large data processing
 sys.setrecursionlimit(100000000)
 
-# Format current timestamp
-def get_timestamp():
-  now = datetime.now()
-  timestamp = now.strftime("%d-%m-%y-%H:%M:%S")
-  return timestamp
+# Enhanced logging setup
+def setup_logging():
+    logger = logging.getLogger('NetDeflect-PaintSecure')
+    logger.setLevel(logging.INFO)
+    
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        './application_data/netdeflect-paintsecure.log',
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+    
+    return logger
+
+logger = setup_logging()
+
+# Data classes for better organization
+@dataclass
+class AttackMetrics:
+    timestamp: datetime
+    pps: int
+    mbps: float
+    cpu_usage: float
+    memory_usage: float
+    connection_count: int
+    source_ips: Set[str] = field(default_factory=set)
+    attack_types: List[str] = field(default_factory=list)
+    severity: str = "LOW"
+
+@dataclass
+class IPReputation:
+    ip: str
+    score: float = 0.0
+    last_seen: datetime = field(default_factory=datetime.now)
+    first_seen: datetime = field(default_factory=datetime.now)
+    attack_count: int = 0
+    packet_count: int = 0
+    is_whitelisted: bool = False
+    is_blacklisted: bool = False
+    geolocation: Optional[Dict] = None
+    asn: Optional[str] = None
+    threat_tags: List[str] = field(default_factory=list)
 
 # Format current timestamp
+def get_timestamp():
+    now = datetime.now()
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return timestamp
+
 def get_timeonly():
-  now = datetime.now()
-  timestamp = now.strftime("%H:%M:%S")
-  return timestamp
+    now = datetime.now()
+    timestamp = now.strftime("%H:%M:%S")
+    return timestamp
 
 # Generate console output prefix
 def get_output_prefix():
-  return f"{TerminalColor.WHITE}[{TerminalColor.RED}{ApplicationVersion.version}{TerminalColor.WHITE}][{TerminalColor.PURPLE}{get_timeonly()}{TerminalColor.WHITE}]{TerminalColor.RESET}"
+    return f"{TerminalColor.WHITE}[{TerminalColor.RED}{ApplicationVersion.version}{TerminalColor.WHITE}][{TerminalColor.PURPLE}{get_timeonly()}{TerminalColor.WHITE}]{TerminalColor.RESET}"
 
 # Global variables
 blocked_ips = []
 attack_status = "None"
+update_available = False
+latest_version_tag = ""
 
-try:
-  # Load configuration file
-  config = configparser.ConfigParser()
-  config.read('settings.ini', encoding='utf-8')
+# Enhanced configuration loader
+class EnhancedConfig:
+    def __init__(self, config_path='settings.ini'):
+        self.config_path = config_path
+        self.config = configparser.ConfigParser()
+        self.load_config()
 
-  # Parse configuration settings
-  ip_method = config["ip_detection"]["ip_method"]
-  firewall_system     = config["firewall"]["firewall_system"]
-  webhook_url         = config["notification"]["webhook_url"]
-  detection_threshold = int(config["triggers"]["detection_threshold"])
-  pps_threshold       = int(config["triggers"]["pps_threshold"])
-  trigger_mode        = config["triggers"]["trigger_mode"]
-  mitigation_pause    = int(config["triggers"]["mitigation_pause"])
-  mbps_threshold      = int(config["triggers"]["mbps_threshold"])
-  packet_count        = int(config["triggers"]["packet_count"])
-  network_interface   = config["capture"]["network_interface"]
-  filter_arguments    = config["capture"]["filter_arguments"]
-  trusted_ips         = config["whitelist"]["trusted_ips"].split(", ")
-  
-  # Advanced mitigation settings
-  enable_fallback_blocking = config.getboolean("advanced_mitigation", "enable_fallback_blocking")
-  block_other_attack_contributors = config.getboolean("advanced_mitigation", "block_other_attack_contributors", fallback=False)
-  enable_pattern_detection = config.getboolean("advanced_mitigation", "enable_pattern_detection", fallback=True)
-  block_autodetected_patterns = config.getboolean("advanced_mitigation", "block_autodetected_patterns", fallback=True)
-  contributor_threshold = int(config.get("advanced_mitigation", "contributor_threshold", fallback="30"))
-  max_pcap_files = int(config.get("advanced_mitigation", "max_pcap_files", fallback="10"))
-  
-  # External firewall API integration
-  enable_api_integration = config.getboolean("external_firewall", "enable_api_integration", fallback=False)
-  
-  if enable_api_integration:
-    # API endpoint and authentication
-    api_endpoint = config.get("external_firewall", "api_endpoint", fallback="")
-    auth_method = config.get("external_firewall", "auth_method", fallback="none")
-    auth_token = config.get("external_firewall", "auth_token", fallback="")
-    auth_username = config.get("external_firewall", "auth_username", fallback="")
-    auth_password = config.get("external_firewall", "auth_password", fallback="")
-    
-    # Request configuration
-    additional_headers = config.get("external_firewall", "additional_headers", fallback="{}")
-    request_method = config.get("external_firewall", "request_method", fallback="POST")
-    request_body_template = config.get("external_firewall", "request_body_template", fallback="")
-    request_timeout = int(config.get("external_firewall", "request_timeout", fallback="10"))
-    
-    # IP sending mode
-    sending_mode = config.get("external_firewall", "sending_mode", fallback="batch")
-    max_ips_per_batch = int(config.get("external_firewall", "max_ips_per_batch", fallback="10"))
-    
-    # Validate API integration settings
-    if not api_endpoint:
-      print(f"{get_output_prefix()} {TerminalColor.YELLOW}Warning: External API integration enabled but endpoint URL is missing{TerminalColor.RESET}")
-      enable_api_integration = False
+    def load_config(self):
+        if not os.path.exists(self.config_path):
+            self.create_default_config()
+        
+        try:
+            self.config.read(self.config_path, encoding='utf-8')
+            self.validate_config()
+        except Exception as e:
+            logger.error(f"Failed to load config: {e}")
+            raise
 
-except Exception as e:
-  print(str(e))
-  # Default configuration template
-  config_template = """
+    def create_default_config(self):
+        default_config = """
 ; Please read all comments carefully before modifying values.
 ; This file controls application behavior, including detection thresholds, notifications, and firewall mitigation.
 ; Do not remove section headers (e.g., [capture], [triggers]) or field names.
@@ -128,6 +186,7 @@ except Exception as e:
 [ip_detection]
 # Options: google_dns, opendns, ipify, icanhazip, local
 ip_method = opendns
+fallback_methods = google_dns,ipify,icanhazip
 
 ########################################
 # NETWORK PACKET CAPTURE CONFIGURATION
@@ -143,6 +202,10 @@ network_interface=eth0
 # Example for SYN/ACK packets only: tcp[tcpflags] & (tcp-syn|tcp-ack) != 0
 filter_arguments=
 
+promiscuous_mode = true
+buffer_size = 64
+snaplen = 65535
+
 ########################################
 # NOTIFICATION SETTINGS
 ########################################
@@ -151,6 +214,17 @@ filter_arguments=
 # Discord Webhook URL used to send alerts during an attack.
 # You can generate one by editing a Discord channel → Integrations → Webhooks.
 webhook_url=https://discord.com/api/webhooks/CHANGE-ME
+
+enable_email = false
+email_smtp_server = smtp.gmail.com
+email_smtp_port = 587
+email_username = 
+email_password = 
+email_recipient = 
+
+enable_sms = false
+sms_gateway = 
+sms_api_key = 
 
 ########################################
 # ATTACK DETECTION & MITIGATION SETTINGS
@@ -181,12 +255,15 @@ mitigation_pause=55
 # Number of packets to capture during an attack for analysis.
 # Lower this if you experience memory or performance issues.
 # Modify this based on your port speed and how much data you expect.
-packet_count=5000
+packet_count=10000
 
 # Number of attack-type occurrences required to confirm an attack.
 # If packet_count is modified, this will also need to be modified.
 # Acts as a sensitivity filter — higher value = stricter classification.
-detection_threshold=270
+detection_threshold=1500
+
+enable_adaptive_threshold = true
+adaptive_sensitivity = 0.7
 
 ########################################
 # FIREWALL / BLOCKING SYSTEM CONFIGURATION
@@ -199,7 +276,14 @@ detection_threshold=270
 #   ufw        - Ubuntu Firewall wrapper
 #   ipset      - Efficient IP list blocking
 #   blackhole  - Adds a null route to silently drop traffic (recommended)
+#   nftables   - Modern netfilter framework
 firewall_system=blackhole
+
+enable_multi_firewall = false
+secondary_firewall = iptables
+block_duration = 3600
+enable_challenge_response = false
+challenge_timeout = 30
 
 ########################################
 # ADVANCED MITIGATION SETTINGS
@@ -230,6 +314,69 @@ contributor_threshold=30
 # Older files will be deleted when this limit is reached
 max_pcap_files=10
 
+enable_ai_analysis = true
+enable_behavioral_analysis = true
+enable_geo_blocking = false
+blocked_countries = CN,RU,KR,IR
+enable_asn_blocking = false
+blocked_asns = 
+
+########################################
+# IP REPUTATION SYSTEM
+########################################
+
+[ip_reputation]
+enable_reputation_system = true
+reputation_threshold = 50
+decay_rate = 0.1
+update_interval = 300
+
+########################################
+# RATE LIMITING
+########################################
+
+[rate_limiting]
+enable_rate_limiting = true
+requests_per_second = 100
+burst_limit = 200
+enable_per_ip_limits = true
+max_connections_per_ip = 50
+
+########################################
+# THREAT INTELLIGENCE
+########################################
+
+[threat_intelligence]
+enable_threat_feeds = true
+update_frequency = 3600
+enable_ip_blacklisting = true
+enable_asn_blacklisting = false
+enable_tor_blocking = true
+enable_vpn_blocking = false
+
+########################################
+# PERFORMANCE SETTINGS
+########################################
+
+[performance]
+max_worker_threads = 10
+packet_queue_size = 10000
+enable_packet_sampling = false
+sampling_rate = 0.1
+enable_compression = true
+compression_level = 6
+
+########################################
+# LOGGING
+########################################
+
+[logging]
+log_level = INFO
+enable_console_logging = true
+enable_file_logging = true
+max_log_size = 10485760
+log_backup_count = 5
+enable_attack_logging = true
 
 ########################################
 # IP WHITELISTING
@@ -240,6 +387,10 @@ max_pcap_files=10
 # As it is in beta, please ensure to add your IP address to avoid being blocked.
 # Use a comma and space between entries. Example: 1.1.1.1, 8.8.8.8, 139.99.201.1
 trusted_ips=8.8.8.8, 8.8.4.4, 1.1.0.1, 1.1.1.1, 216.239.32.10
+trusted_asns = 15169, 36692, 8075
+trusted_countries = US,GB,DE,FR,JP
+enable_dynamic_whitelist = true
+dynamic_whitelist_threshold = 90
 
 ########################################
 # EXTERNAL FIREWALL API INTEGRATION
@@ -280,131 +431,276 @@ max_ips_per_batch=100
 # {{IP_LIST}} - Array of IPs as strings ["1.1.1.1", "2.2.2.2"] (for batch/all modes)
 # {{IP_CSV}} - Comma-separated IPs "1.1.1.1,2.2.2.2" (for batch/all modes)
 # {{TIMESTAMP}} - Current timestamp
-# {{SOURCE}} - "NetDeflect"
+# {{SOURCE}} - "PaintSecure"
 # Note: Escape quotes with backslash
-request_body_template={"source": "NetDeflect", "timestamp": "{{TIMESTAMP}}", "ips": {{IP_LIST}}}
+request_body_template={"source": "PaintSecure", "timestamp": "{{TIMESTAMP}}", "ips": {{IP_LIST}}}
 
 # Request timeout in seconds
 request_timeout=10
 
+########################################
+# MONITORING
+########################################
+
+[monitoring]
+enable_health_checks = true
+health_check_interval = 60
+enable_metrics_export = false
+metrics_endpoint = 
+enable_auto_scaling = false
+min_workers = 2
+max_workers = 20
+
+########################################
+# SECURITY
+########################################
+
+[security]
+enable_encryption = true
+encryption_key = 
+enable_hmac = true
+hmac_key = 
+enable_tls = true
+tls_cert_path = 
+tls_key_path = 
+enable_audit_log = true
+audit_log_retention = 90
+
+########################################
+# ADVANCED PROTECTION
+########################################
+
+[advanced]
+enable_zero_day_protection = true
+enable_syn_flood_protection = true
+enable_udp_flood_protection = true
+enable_icmp_flood_protection = true
+enable_http_flood_protection = true
+enable_dns_amplification_protection = true
+enable_ntp_amplification_protection = true
+enable_memcached_amplification_protection = true
+enable_ssdp_amplification_protection = true
+
 """
-  # Write default configuration
-  with open("settings.ini", "w", encoding='utf-8') as outfile:
-      outfile.write(config_template)
+        
+        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            f.write(default_config)
+        logger.info(f"Created default configuration at {self.config_path}")
 
-  # Inform user
-  print(f"{get_output_prefix()} Please configure settings.ini then restart the program")
+    def validate_config(self):
+        """Validate configuration values"""
+        required_sections = ['ip_detection', 'capture', 'triggers', 'firewall']
+        for section in required_sections:
+            if not self.config.has_section(section):
+                raise ValueError(f"Missing required section: {section}")
 
-  # Exit application
-  exit()
+        # Validate IP detection method
+        valid_ip_methods = ['google_dns', 'opendns', 'ipify', 'icanhazip', 'local']
+        ip_method = self.config.get('ip_detection', 'ip_method', fallback='opendns')
+        if ip_method not in valid_ip_methods:
+            raise ValueError(f"Invalid IP detection method: {ip_method}")
 
-def get_ip(method):
-    if method == "google_dns":
-        return subprocess.getoutput('dig TXT +short o-o.myaddr.l.google.com @ns1.google.com').replace('"', '').strip()
-    elif method == "opendns":
-        return subprocess.getoutput('dig +short myip.opendns.com @resolver1.opendns.com').strip()
-    elif method == "ipify":
-        return requests.get("https://api.ipify.org", timeout=5).text.strip()
-    elif method == "icanhazip":
-        return requests.get("https://icanhazip.com", timeout=5).text.strip()
-    elif method == "local":
-        return socket.gethostbyname(socket.gethostname())
-    else:
-        raise ValueError(f"Unknown IP detection method: {method}")
-    
-system_ip = get_ip(ip_method)
+        # Validate trigger mode
+        valid_modes = ['P', 'M', 'MP']
+        trigger_mode = self.config.get('triggers', 'trigger_mode', fallback='MP')
+        if trigger_mode not in valid_modes:
+            raise ValueError(f"Invalid trigger mode: {trigger_mode}")
 
-# Create required directory structure
-def dir():
-    # Define application directories
-    directories = [
-        "./application_data",
-        "./application_data/captures",
-        "./application_data/ips",
-        "./application_data/attack_analysis"
-    ]
-    
-    # Create each directory if it doesn't exist
-    for directory in directories:
+        # Validate firewall system
+        valid_firewalls = ['iptables', 'ufw', 'ipset', 'blackhole', 'nftables']
+        firewall = self.config.get('firewall', 'firewall_system', fallback='blackhole')
+        if firewall not in valid_firewalls:
+            raise ValueError(f"Invalid firewall system: {firewall}")
+
+        # Validate thresholds
         try:
-            os.makedirs(directory, exist_ok=True)
-        except Exception:
-            pass
+            pps_threshold = self.config.getint('triggers', 'pps_threshold')
+            mbps_threshold = self.config.getint('triggers', 'mbps_threshold')
+            if pps_threshold <= 0 or mbps_threshold < 0:
+                raise ValueError("Thresholds must be positive values")
+        except ValueError as e:
+            raise ValueError(f"Invalid threshold value: {e}")
 
-# Configure ipset tables for IP filtering
-def configure_ipset():
-    # Create IP filtering tables
-    subprocess.call('ipset -N blocked_ips hash:net family inet', shell=True, stdout=DEVNULL, stderr=STDOUT)
-    subprocess.call('ipset -N trusted_ips hash:net family inet', shell=True, stdout=DEVNULL, stderr=STDOUT)
+    def get(self, section, option, fallback=None, type=str):
+        """Get configuration value with type conversion"""
+        try:
+            if type == int:
+                return self.config.getint(section, option, fallback=fallback)
+            elif type == float:
+                return self.config.getfloat(section, option, fallback=fallback)
+            elif type == bool:
+                return self.config.getboolean(section, option, fallback=fallback)
+            elif type == list:
+                value = self.config.get(section, option, fallback='')
+                return [item.strip() for item in value.split(',') if item.strip()]
+            else:
+                return self.config.get(section, option, fallback=fallback)
+        except Exception as e:
+            logger.warning(f"Error reading config {section}.{option}: {e}")
+            return fallback
 
-    # Configure iptables rules
-    subprocess.call('iptables -t raw -I PREROUTING -m set --match-set blocked_ips src -j DROP', shell=True, stdout=DEVNULL, stderr=STDOUT)
-    subprocess.call('iptables -t raw -I PREROUTING -m set --match-set trusted_ips src -j ACCEPT', shell=True, stdout=DEVNULL, stderr=STDOUT)
-
-def is_protected_ip(ip_address):
-  # Check if IP is already in blocked list
-  if ip_address in blocked_ips:
-    return True
-
-  # Protect system's own IP
-  if ip_address == system_ip:
-    return True
-
-  # Check against trusted IPs list
-  if ip_address in trusted_ips:
-    return True
-
-  # IP is not protected
-  return False
-
-# Format IP address display
-def format_ip_display(ip_address):
-  length = len(ip_address)
-  if 6 <= length <= 15:
-      spaces = " " * (15 - length)
-      return f"{ip_address}{spaces}"
-  return ip_address
-
-def block_ip(ip_address):
-  try:
-    # Clean up IP string
-    ip_address = ip_address.strip()
-
-    # Format for display
-    formatted_ip = format_ip_display(ip_address)
-
-    # Skip protected IPs
-    if is_protected_ip(ip_address):
-      return False
-
-    # Select appropriate firewall command
-    cmd = ""
-    if firewall_system == 'ufw':
-        cmd = f"sudo ufw deny from {ip_address}"
-    elif firewall_system == 'ipset':
-        cmd = f"ipset -A blocked_ips {ip_address}"
-    elif firewall_system == "iptables":
-        cmd = f"iptables -A INPUT -s {ip_address} -j DROP"
-    elif firewall_system == "blackhole":
-        cmd = f"ip route add blackhole {ip_address}"
-    else:
-        print(f"{get_output_prefix()} Unrecognized firewall_system! Please select \"ufw\", \"iptables\", \"ipset\", or \"blackhole\"")
-        exit()
+# Initialize enhanced configuration
+try:
+    config = EnhancedConfig('settings.ini')
     
-    # Execute firewall command
-    if cmd:
-        subprocess.call(cmd, shell=True, stdout=DEVNULL, stderr=STDOUT)
-        print(f"{get_output_prefix()} Blocked malicious IP: {TerminalColor.BLUE}[{TerminalColor.RED}{formatted_ip}{TerminalColor.BLUE}]{TerminalColor.RESET}")
-        blocked_ips.append(ip_address)
-        return True
+    # Parse configuration with enhanced options
+    ip_method = config.get('ip_detection', 'ip_method', 'opendns')
+    fallback_methods = config.get('ip_detection', 'fallback_methods', [], type=list)
+    firewall_system = config.get('firewall', 'firewall_system', 'blackhole')
+    enable_multi_firewall = config.get('firewall', 'enable_multi_firewall', False, type=bool)
+    secondary_firewall = config.get('firewall', 'secondary_firewall', 'iptables')
+    block_duration = config.get('firewall', 'block_duration', 3600, type=int)
+    webhook_url = config.get('notification', 'webhook_url')
+    enable_email = config.get('notification', 'enable_email', False, type=bool)
+    detection_threshold = config.get('triggers', 'detection_threshold', 1500, type=int)
+    pps_threshold = config.get('triggers', 'pps_threshold', 15000, type=int)
+    trigger_mode = config.get('triggers', 'trigger_mode', 'MP')
+    mitigation_pause = config.get('triggers', 'mitigation_pause', 55, type=int)
+    mbps_threshold = config.get('triggers', 'mbps_threshold', 30, type=int)
+    packet_count = config.get('triggers', 'packet_count', 10000, type=int)
+    enable_adaptive_threshold = config.get('triggers', 'enable_adaptive_threshold', True, type=bool)
+    network_interface = config.get('capture', 'network_interface', 'eth0')
+    filter_arguments = config.get('capture', 'filter_arguments', '')
+    promiscuous_mode = config.get('capture', 'promiscuous_mode', True, type=bool)
+    trusted_ips = config.get('whitelist', 'trusted_ips', [], type=list)
+    trusted_asns = config.get('whitelist', 'trusted_asns', [], type=list)
+    enable_dynamic_whitelist = config.get('whitelist', 'enable_dynamic_whitelist', True, type=bool)
+    
+    # Advanced mitigation settings
+    enable_fallback_blocking = config.get('advanced_mitigation', 'enable_fallback_blocking', False, type=bool)
+    block_other_attack_contributors = config.get('advanced_mitigation', 'block_other_attack_contributors', False, type=bool)
+    enable_pattern_detection = config.get('advanced_mitigation', 'enable_pattern_detection', True, type=bool)
+    block_autodetected_patterns = config.get('advanced_mitigation', 'block_autodetected_patterns', False, type=bool)
+    contributor_threshold = config.get('advanced_mitigation', 'contributor_threshold', 30, type=int)
+    max_pcap_files = config.get('advanced_mitigation', 'max_pcap_files', 10, type=int)
+    enable_ai_analysis = config.get('advanced_mitigation', 'enable_ai_analysis', True, type=bool)
+    enable_behavioral_analysis = config.get('advanced_mitigation', 'enable_behavioral_analysis', True, type=bool)
+    enable_geo_blocking = config.get('advanced_mitigation', 'enable_geo_blocking', False, type=bool)
+    blocked_countries = config.get('advanced_mitigation', 'blocked_countries', [], type=list)
+    
+    # IP reputation settings
+    enable_reputation_system = config.get('ip_reputation', 'enable_reputation_system', True, type=bool)
+    reputation_threshold = config.get('ip_reputation', 'reputation_threshold', 50, type=float)
+    
+    # Rate limiting settings
+    enable_rate_limiting = config.get('rate_limiting', 'enable_rate_limiting', True, type=bool)
+    requests_per_second = config.get('rate_limiting', 'requests_per_second', 100, type=int)
+    
+    # Threat intelligence settings
+    enable_threat_feeds = config.get('threat_intelligence', 'enable_threat_feeds', True, type=bool)
+    enable_tor_blocking = config.get('threat_intelligence', 'enable_tor_blocking', True, type=bool)
+    
+    # Performance settings
+    max_worker_threads = config.get('performance', 'max_worker_threads', 10, type=int)
+    enable_compression = config.get('performance', 'enable_compression', True, type=bool)
+    
+    # Security settings
+    enable_encryption = config.get('security', 'enable_encryption', True, type=bool)
+    enable_audit_log = config.get('security', 'enable_audit_log', True, type=bool)
+    
+    # Advanced protection settings
+    enable_syn_flood_protection = config.get('advanced', 'enable_syn_flood_protection', True, type=bool)
+    enable_udp_flood_protection = config.get('advanced', 'enable_udp_flood_protection', True, type=bool)
+    enable_dns_amplification_protection = config.get('advanced', 'enable_dns_amplification_protection', True, type=bool)
+    
+    # External firewall API integration
+    enable_api_integration = config.get('external_firewall', 'enable_api_integration', False, type=bool)
+    
+    if enable_api_integration:
+        # API endpoint and authentication
+        api_endpoint = config.get('external_firewall', 'api_endpoint', '')
+        auth_method = config.get('external_firewall', 'auth_method', 'none')
+        auth_token = config.get('external_firewall', 'auth_token', '')
+        auth_username = config.get('external_firewall', 'auth_username', '')
+        auth_password = config.get('external_firewall', 'auth_password', '')
+        
+        # Request configuration
+        additional_headers = config.get('external_firewall', 'additional_headers', '{}')
+        request_method = config.get('external_firewall', 'request_method', 'POST')
+        request_body_template = config.get('external_firewall', 'request_body_template', '')
+        request_timeout = config.get('external_firewall', 'request_timeout', 10, type=int)
+        
+        # IP sending mode
+        sending_mode = config.get('external_firewall', 'sending_mode', 'batch')
+        max_ips_per_batch = config.get('external_firewall', 'max_ips_per_batch', 10, type=int)
+        
+        # Validate API integration settings
+        if not api_endpoint:
+            print(f"{get_output_prefix()} {TerminalColor.YELLOW}Warning: External API integration enabled but endpoint URL is missing{TerminalColor.RESET}")
+            enable_api_integration = False
 
-  except Exception as e:
-    print(f"{get_output_prefix()} Error occurred: {TerminalColor.BLUE}[{TerminalColor.RED}{e}{TerminalColor.BLUE}]{TerminalColor.RESET}")
-  
-  return False
+except Exception as e:
+    logger.error(f"Configuration error: {e}")
+    print(f"{get_output_prefix()} Configuration error: {e}")
+    exit(1)
 
-update_available = False
-latest_version_tag = ""
+# Enhanced IP detection with fallback
+def get_ip_with_fallback(method, fallback_methods):
+    methods = [method] + fallback_methods
+    for m in methods:
+        try:
+            if m == "google_dns":
+                ip = subprocess.getoutput('dig TXT +short o-o.myaddr.l.google.com @ns1.google.com').replace('"', '').strip()
+            elif m == "opendns":
+                ip = subprocess.getoutput('dig +short myip.opendns.com @resolver1.opendns.com').strip()
+            elif m == "ipify":
+                ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+            elif m == "icanhazip":
+                ip = requests.get("https://icanhazip.com", timeout=5).text.strip()
+            elif m == "local":
+                ip = socket.gethostbyname(socket.gethostname())
+            else:
+                continue
+            
+            # Validate IP address
+            if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+                logger.info(f"Detected IP using {m}: {ip}")
+                return ip
+        except Exception as e:
+            logger.warning(f"Failed to get IP using {m}: {e}")
+            continue
+    
+    raise ValueError("All IP detection methods failed")
+
+system_ip = get_ip_with_fallback(ip_method, fallback_methods)
+def block_ip(ip_address):
+    try:
+        # Clean up IP string
+        ip_address = ip_address.strip()
+
+        # Format for display
+        formatted_ip = format_ip_display(ip_address)
+
+        # Skip protected IPs
+        if is_protected_ip(ip_address):
+            return False
+
+        # Select appropriate firewall command
+        cmd = ""
+        if firewall_system == 'ufw':
+            cmd = f"sudo ufw deny from {ip_address}"
+        elif firewall_system == 'ipset':
+            cmd = f"ipset -A blocked_ips {ip_address}"
+        elif firewall_system == "iptables":
+            cmd = f"iptables -A INPUT -s {ip_address} -j DROP"
+        elif firewall_system == "blackhole":
+            cmd = f"ip route add blackhole {ip_address}"
+        else:
+            print(f"{get_output_prefix()} Unrecognized firewall_system! Please select \"ufw\", \"iptables\", \"ipset\", or \"blackhole\"")
+            exit()
+        
+        # Execute firewall command
+        if cmd:
+            subprocess.call(cmd, shell=True, stdout=DEVNULL, stderr=STDOUT)
+            print(f"{get_output_prefix()} Blocked malicious IP: {TerminalColor.BLUE}[{TerminalColor.RED}{formatted_ip}{TerminalColor.BLUE}]{TerminalColor.RESET}")
+            blocked_ips.append(ip_address)
+            return True
+
+    except Exception as e:
+        print(f"{get_output_prefix()} Error occurred: {TerminalColor.BLUE}[{TerminalColor.RED}{e}{TerminalColor.BLUE}]{TerminalColor.RESET}")
+    
+    return False
 
 def check_for_updates():
     global update_available, latest_version_tag
@@ -413,7 +709,7 @@ def check_for_updates():
         api_url = "https://api.github.com/repos/0vm/NetDeflect/releases/latest"
         
         # Get current version number (extract from version string)
-        current_version = ApplicationVersion.version.split("v")[1].strip() if "v" in ApplicationVersion.version else "2.0"
+        current_version = ApplicationVersion.version.split("v")[1].strip() if "v" in ApplicationVersion.version else "2.5"
         
         # Request latest release info
         response = requests.get(api_url, timeout=5)
@@ -537,7 +833,7 @@ class AttackVectors:
             print(f"{get_output_prefix()} Failed to load methods: {str(e)}")
             print(f"{get_output_prefix()} Make sure to have methods.json in the same directory!")
             return False
-
+# External API Integration Functions
 def send_ips_to_external_api(ip_list):
     """
     Send IP addresses to an external API based on user configuration
@@ -589,7 +885,6 @@ def send_ips_to_external_api(ip_list):
         print(f"{get_output_prefix()} {TerminalColor.RED}Error sending IPs to external API: {str(e)}{TerminalColor.RESET}")
         return False
 
-
 def send_single_ip_to_api(ip):
     """
     Send a single IP to the external API
@@ -621,7 +916,7 @@ def send_single_ip_to_api(ip):
         if request_body_template:
             body = request_body_template.replace("{{IP}}", ip)
             body = body.replace("{{TIMESTAMP}}", get_timestamp())
-            body = body.replace("{{SOURCE}}", "NetDeflect")
+            body = body.replace("{{SOURCE}}", "PaintSecure")
             
             # Convert string to JSON if needed
             if body.strip().startswith("{") or body.strip().startswith("["):
@@ -647,7 +942,6 @@ def send_single_ip_to_api(ip):
     except Exception as e:
         print(f"{get_output_prefix()} {TerminalColor.RED}Error sending IP {ip} to external API: {str(e)}{TerminalColor.RESET}")
         return False
-
 
 def send_ip_batch_to_api(ip_batch):
     """
@@ -686,7 +980,7 @@ def send_ip_batch_to_api(ip_batch):
             body = request_body_template.replace("{{IP_LIST}}", ip_list_json)
             body = body.replace("{{IP_CSV}}", ip_list_csv)
             body = body.replace("{{TIMESTAMP}}", get_timestamp())
-            body = body.replace("{{SOURCE}}", "NetDeflect")
+            body = body.replace("{{SOURCE}}", "PaintSecure")
             
             # Convert string to JSON if needed
             if body.strip().startswith("{") or body.strip().startswith("["):
@@ -712,7 +1006,6 @@ def send_ip_batch_to_api(ip_batch):
     except Exception as e:
         print(f"{get_output_prefix()} {TerminalColor.RED}Error sending IPs to external API: {str(e)}{TerminalColor.RESET}")
         return False
-
 
 def send_api_request(url, method, headers, auth, body):
     """
@@ -761,7 +1054,6 @@ def send_api_request(url, method, headers, auth, body):
         print(f"{get_output_prefix()} {TerminalColor.RED}API request error: {str(e)}{TerminalColor.RESET}")
         return None
 
-
 def parse_json_config(json_string):
     """
     Parse a JSON string from config safely
@@ -781,222 +1073,88 @@ def parse_json_config(json_string):
         print(f"{get_output_prefix()} {TerminalColor.RED}Error parsing JSON config: {str(e)}{TerminalColor.RESET}")
         return {}
 
-# Get network statistics
-def get_network_stats():
-    # Collect initial network stats
-    bytes_initial = round(int(psutil.net_io_counters().bytes_recv) / 1024 / 1024, 3)
-    packets_initial = int(psutil.net_io_counters().packets_recv)
-
-    # Wait for next sample
-    time.sleep(1)
-
-    # Collect updated network stats
-    packets_current = int(psutil.net_io_counters().packets_recv)
-    bytes_current = round(int(psutil.net_io_counters().bytes_recv) / 1024 / 1024, 3)
-
-    # Calculate network statistics
-    pps = packets_current - packets_initial
-    mbps = round(bytes_current - bytes_initial)
-    cpu_usage = f"{int(round(psutil.cpu_percent()))}%"
-    
-    return pps, mbps, cpu_usage
-
-# Display current network status
-def display_network_stats(pps, mbps, cpu_usage):
-    showed_update = display_update_notification()
-    print(f"{get_output_prefix()}           IP Address: {TerminalColor.WHITE}[{TerminalColor.RED}{system_ip}{TerminalColor.WHITE}]{TerminalColor.RESET}")
-    print(f"{get_output_prefix()}                  CPU: {TerminalColor.WHITE}[{TerminalColor.RED}{cpu_usage}{TerminalColor.WHITE}]{TerminalColor.RESET}")
-    print(f"{get_output_prefix()}                 MB/s: {TerminalColor.WHITE}[{TerminalColor.RED}{mbps}{TerminalColor.WHITE}]{TerminalColor.RESET}")
-    print(f"{get_output_prefix()}   Packets Per Second: {TerminalColor.WHITE}[{TerminalColor.RED}{pps}{TerminalColor.WHITE}]{TerminalColor.RESET}")
-    return showed_update
-
-def extract_common_patterns(capture_file, min_pattern_length=8, min_occurrence=3, top_ips_count=10):
+# Enhanced Pattern Detection
+def extract_common_patterns(capture_file, min_occurrences=3):
     """
-    Extract common hex patterns from packet data sent by top contributing IPs.
+    Extract common patterns from packet capture data.
     
     Args:
         capture_file (str): Path to the packet capture file
-        min_pattern_length (int): Minimum length of hex pattern to consider (in characters)
-        min_occurrence (int): Minimum number of occurrences needed to consider a pattern
-        top_ips_count (int): Number of top contributing IPs to analyze
+        min_occurrences (int): Minimum number of occurrences for a pattern to be considered
         
     Returns:
-        tuple: (most_common_pattern, source_ips, pattern_count)
+        tuple: (hex_pattern, source_ips, count) or (None, [], 0) if no patterns found
     """
     try:
-        print(f"{get_output_prefix()} Analyzing capture for common attack patterns...")
-        
-        # Get top traffic contributors
-        top_contributors = find_top_traffic_contributors(capture_file, top_count=top_ips_count)
-        if not top_contributors:
-            print(f"{get_output_prefix()} No significant traffic contributors found")
-            return None, [], 0
-            
-        # Filter out protected IPs
-        top_ips = []
-        for ip, count, percent in top_contributors:
-            if not is_protected_ip(ip) and percent > 10:  # Only consider IPs with >10% contribution
-                top_ips.append(ip)
-        
-        if not top_ips:
-            print(f"{get_output_prefix()} No non-protected traffic contributors found")
-            return None, [], 0
-            
-        print(f"{get_output_prefix()} Analyzing payloads from {len(top_ips)} source IPs")
-        
-        # Extract payload data for these IPs
-        ip_filter = " or ".join([f"ip.src == {ip}" for ip in top_ips])
-        cmd = f'sudo tshark -r {capture_file} -Y "({ip_filter}) and data" -T fields -e ip.src -e data'
-        
+        # Extract hex data from packets
+        cmd = f'sudo tshark -r {capture_file} -T fields -e data -e ip.src'
         process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
-        if process.returncode != 0 or not process.stdout.strip():
-            print(f"{get_output_prefix()} No payload data found in capture")
+        if process.returncode != 0:
             return None, [], 0
-            
-        # Process the output to find common patterns
-        ip_payload_map = {}
-        all_payloads = []
+        
+        # Parse the output
+        hex_patterns = defaultdict(lambda: {'count': 0, 'ips': set()})
         
         for line in process.stdout.strip().split('\n'):
-            if '\t' in line:
-                parts = line.strip().split('\t')
-                if len(parts) == 2:
-                    ip = parts[0].strip()
-                    payload = parts[1].strip()
+            if line.strip():
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    hex_data = parts[0].strip()
+                    source_ip = parts[1].strip()
                     
-                    # Only consider payloads of sufficient length
-                    if len(payload) >= min_pattern_length:
-                        if ip not in ip_payload_map:
-                            ip_payload_map[ip] = []
-                        
-                        # Add to IP-specific payloads
-                        if payload not in ip_payload_map[ip]:
-                            ip_payload_map[ip].append(payload)
-                            
-                        # Add to all payloads for frequency counting
-                        all_payloads.append(payload)
+                    if hex_data and source_ip:
+                        # Look for patterns in the hex data (first 32 characters)
+                        pattern = hex_data[:32] if len(hex_data) >= 32 else hex_data
+                        if len(pattern) >= 8:  # Minimum pattern length
+                            hex_patterns[pattern]['count'] += 1
+                            hex_patterns[pattern]['ips'].add(source_ip)
         
-        if not all_payloads:
-            print(f"{get_output_prefix()} No valid payloads found for analysis")
-            return None, [], 0
-            
-        # Count frequency of each payload
-        from collections import Counter
-        payload_counter = Counter(all_payloads)
+        # Find the most common pattern
+        best_pattern = None
+        best_count = 0
+        best_ips = []
         
-        # Find payloads that appear in multiple IPs and have sufficient occurrences
-        common_patterns = {}
-        for payload, count in payload_counter.most_common(20):
-            # Count how many different IPs sent this payload
-            ip_count = sum(1 for ip, payloads in ip_payload_map.items() if payload in payloads)
-            
-            if ip_count >= min(3, len(top_ips)) and count >= min_occurrence:
-                common_patterns[payload] = (count, ip_count)
+        for pattern, data in hex_patterns.items():
+            if data['count'] >= min_occurrences and data['count'] > best_count:
+                best_pattern = pattern
+                best_count = data['count']
+                best_ips = list(data['ips'])
         
-        if not common_patterns:
-            # Try to find common substrings across different payloads
-            substrings = extract_common_substrings(all_payloads, min_length=min_pattern_length)
-            if substrings:
-                most_common = max(substrings.items(), key=lambda x: x[1][0])
-                pattern = most_common[0]
-                count = most_common[1][0]
-                unique_ips = list(set([ip for ip in top_ips if any(pattern in payload for payload in ip_payload_map.get(ip, []))]))
-                
-                if len(unique_ips) >= min(3, len(top_ips)) and count >= min_occurrence:
-                    print(f"{get_output_prefix()} Found common substring pattern: {pattern} (occurs {count} times across {len(unique_ips)} IPs)")
-                    return pattern, unique_ips, count
-            
-            print(f"{get_output_prefix()} No common patterns found across multiple source IPs")
-            return None, [], 0
-        
-        # Get the most common pattern
-        most_common = max(common_patterns.items(), key=lambda x: x[1][0])
-        pattern = most_common[0]
-        count = most_common[1][0]
-        ip_count = most_common[1][1]
-        
-        # Get the specific IPs that sent this pattern
-        pattern_ips = [ip for ip, payloads in ip_payload_map.items() if pattern in payloads]
-        
-        print(f"{get_output_prefix()} Found common pattern: {pattern} (occurs {count} times across {ip_count} IPs)")
-        
-        return pattern, pattern_ips, count
+        return best_pattern, best_ips, best_count
         
     except Exception as e:
-        print(f"{get_output_prefix()} Error analyzing for common patterns: {str(e)}")
+        print(f"{get_output_prefix()} Error extracting patterns: {str(e)}")
         return None, [], 0
 
-
-def extract_common_substrings(payloads, min_length=8):
+def save_detected_signature(ip_list, hex_pattern, category, label):
     """
-    Extract common substrings from a list of payloads.
+    Save a newly detected attack signature to the database.
     
     Args:
-        payloads (list): List of payload strings
-        min_length (int): Minimum length of substring to consider
-        
-    Returns:
-        dict: Dictionary mapping substrings to (count, ip_count)
-    """
-    if not payloads or len(payloads) < 2:
-        return {}
-    
-    # Get potential substrings from the first few payloads
-    sample_payloads = payloads[:min(20, len(payloads))]
-    potential_substrings = set()
-    
-    for payload in sample_payloads:
-        length = len(payload)
-        for i in range(length - min_length + 1):
-            for j in range(i + min_length, min(i + 64, length + 1)):
-                substring = payload[i:j]
-                if len(substring) >= min_length:
-                    potential_substrings.add(substring)
-    
-    # Count occurrences of each potential substring
-    substring_counts = {}
-    for substring in potential_substrings:
-        count = sum(1 for payload in payloads if substring in payload)
-        if count >= 3:
-            # This is a placeholder for the IP count, which we'll compute later if needed
-            substring_counts[substring] = (count, 0)
-    
-    return substring_counts
-
-
-def save_detected_signature(ip_list, hex_pattern, category="valid_ip_attacks", label=None):
-    """
-    Save a newly detected attack signature to new_detected_methods.json
-    
-    Args:
-        ip_list (list): List of source IPs that exhibited this pattern
+        ip_list (list): List of source IPs associated with this pattern
         hex_pattern (str): The hex pattern that was detected
-        category (str): Attack category (default: valid_ip_attacks)
-        label (str): Custom label for the attack (default: auto-generated)
+        category (str): Category to save the pattern under
+        label (str): Human-readable label for the pattern
         
     Returns:
-        bool: True if successful, False otherwise
+        bool: True if saved successfully, False otherwise
     """
     try:
-        # Auto-generate label if not provided
-        if not label:
-            # Take first 4-8 characters of the pattern for the label
-            prefix = hex_pattern[:min(8, len(hex_pattern))]
-            label = f"AutoDetect_{prefix}"
+        file_path = "./application_data/new_detected_methods.json"
         
-        # Create entry
-        timestamp = get_timestamp()
+        # Create the new entry
         new_entry = {
-            "timestamp": timestamp,
-            "source_ips": ip_list,
+            "timestamp": get_timestamp(),
             "pattern": hex_pattern,
+            "label": label,
             "category": category,
-            "label": label
+            "source_ips": ip_list,
+            "ip_count": len(ip_list),
+            "confidence": "auto-detected"
         }
         
-        # Check if file exists and load existing data
-        file_path = "./application_data/new_detected_methods.json"
+        # Load existing entries
         existing_entries = []
         
         try:
@@ -1031,7 +1189,6 @@ def save_detected_signature(ip_list, hex_pattern, category="valid_ip_attacks", l
     except Exception as e:
         print(f"{get_output_prefix()} Error saving detected signature: {str(e)}")
         return False
-
 
 def analyze_unclassified_attack(capture_file):
     """
@@ -1079,6 +1236,25 @@ def analyze_unclassified_attack(capture_file):
     except Exception as e:
         print(f"{get_output_prefix()} Error analyzing unclassified attack: {str(e)}")
         return result
+# Network Statistics and Monitoring
+def get_network_stats():
+    # Collect initial network stats
+    bytes_initial = round(int(psutil.net_io_counters().bytes_recv) / 1024 / 1024, 3)
+    packets_initial = int(psutil.net_io_counters().packets_recv)
+
+    # Wait for next sample
+    time.sleep(1)
+
+    # Collect updated network stats
+    packets_current = int(psutil.net_io_counters().packets_recv)
+    bytes_current = round(int(psutil.net_io_counters().bytes_recv) / 1024 / 1024, 3)
+
+    # Calculate network statistics
+    pps = packets_current - packets_initial
+    mbps = round(bytes_current - bytes_initial)
+    cpu_usage = f"{int(round(psutil.cpu_percent()))}%"
+    
+    return pps, mbps, cpu_usage
 
 # Clear previous output lines
 def clear_lines(count=5):
@@ -1091,6 +1267,15 @@ def clear_lines(count=5):
     for i in range(count):
         sys.stdout.write('\x1b[1A')
         sys.stdout.write('\x1b[2K')
+
+# Display current network status
+def display_network_stats(pps, mbps, cpu_usage):
+    showed_update = display_update_notification()
+    print(f"{get_output_prefix()}           IP Address: {TerminalColor.WHITE}[{TerminalColor.RED}{system_ip}{TerminalColor.WHITE}]{TerminalColor.RESET}")
+    print(f"{get_output_prefix()}                  CPU: {TerminalColor.WHITE}[{TerminalColor.RED}{cpu_usage}{TerminalColor.WHITE}]{TerminalColor.RESET}")
+    print(f"{get_output_prefix()}                 MB/s: {TerminalColor.WHITE}[{TerminalColor.RED}{mbps}{TerminalColor.WHITE}]{TerminalColor.RESET}")
+    print(f"{get_output_prefix()}   Packets Per Second: {TerminalColor.WHITE}[{TerminalColor.RED}{pps}{TerminalColor.WHITE}]{TerminalColor.RESET}")
+    print(f"{get_output_prefix()}        Blocked Count: {TerminalColor.WHITE}[{TerminalColor.RED}{len(blocked_ips)}{TerminalColor.WHITE}]{TerminalColor.RESET}")
 
 # Check if attack thresholds are exceeded
 def is_under_attack(pps, mbps):
@@ -1121,7 +1306,7 @@ def get_attack_category(signature_name):
     else:
         return 'other'  # Default to 'other' if not found
 
-# Modify the capture_and_analyze_traffic function to handle unclassified attacks
+# Enhanced Traffic Capture and Analysis
 def capture_and_analyze_traffic():
     try:
         # Initialize variables
@@ -1340,7 +1525,7 @@ def find_top_traffic_contributors(capture_file, top_count=5, min_percentage=30):
         print(f"{get_output_prefix()} Error finding top traffic contributors: {str(e)}")
         return []
 
-# Modify the analyze_attack_type function to handle unclassified attacks
+# Attack Type Analysis
 def analyze_attack_type(packet_data):
     # Initialize attack classification variables
     attack_categories = set()
@@ -1413,7 +1598,6 @@ def analyze_attack_type(packet_data):
     
     # Return attack type, readable format, and categories
     return attack_type, attack_signatures_readable, attack_categories
-
 # Block IPs found in attack
 def block_malicious_ips(unique_ip_file):
     global blocked_ips
@@ -1489,8 +1673,7 @@ def send_notification(notification_template, attack_id, pps, mbps, cpu_usage, st
         print(f"{get_output_prefix()} {TerminalColor.RED}Notification Status: {TerminalColor.BLUE}[{TerminalColor.RED}    Failed    {TerminalColor.BLUE}]{TerminalColor.RESET}")
         return False
 
-# Update the main function to include custom API integration
-
+# Enhanced Main Function with Advanced Features
 def main():
     global blocked_ips
     start_update_checker()
@@ -1502,51 +1685,51 @@ def main():
     except:
         # Default notification template
         default_template = {
-        "content": None,
-        "embeds": [
-            {
-                "title": "⚠️ DDoS Attack Mitigated: #{{attack_id}}",
-                "description": "NetDeflect detected and responded to a potential attack.",
-                "url": "https://github.com/0vm/NetDeflect",
-                "color": 16734296,
-                "fields": [
-                    {
-                        "name": "📊 Pre-Mitigation Stats",
-                        "value": (
-                            "• **Packets/s (PPS):** {{pps}}\n"
-                            "• **Megabits/s (Mbps):** {{mbps}}\n"
-                            "• **CPU Usage:** {{cpu}}"
-                        ),
-                        "inline": False
+            "content": None,
+            "embeds": [
+                {
+                    "title": "⚠️ DDoS Attack Mitigated: #{{attack_id}}",
+                    "description": "PaintSecure detected and responded to a potential attack.",
+                    "url": "https://github.com/0vm/NetDeflect",
+                    "color": 16734296,
+                    "fields": [
+                        {
+                            "name": "📊 Pre-Mitigation Stats",
+                            "value": (
+                                "• **Packets/s (PPS):** {{pps}}\n"
+                                "• **Megabits/s (Mbps):** {{mbps}}\n"
+                                "• **CPU Usage:** {{cpu}}"
+                            ),
+                            "inline": False
+                        },
+                        {
+                            "name": "🛡️ Post-Mitigation Results",
+                            "value": (
+                                "• **Status:** {{status}}\n"
+                                "• **IPs Blocked:** {{block_count}}\n"
+                                "• **Attack Type:** {{attack_vector}}\n"
+                                "• **Attack Category:** {{attack_category}}\n"
+                                "• **Blocking Strategy:** {{blocking_strategy}}"
+                            ),
+                            "inline": False
+                        },
+                        {
+                            "name": "📁 Analysis Report",
+                            "value": "{{report_file}}",
+                            "inline": True
+                        }
+                    ],
+                    "author": {
+                        "name": "PaintSecure - mod by martin",
+                        "icon_url": "https://avatars.githubusercontent.com/u/79897291?s=96&v=4"
                     },
-                    {
-                        "name": "🛡️ Post-Mitigation Results",
-                        "value": (
-                            "• **Status:** {{status}}\n"
-                            "• **IPs Blocked:** {{block_count}}\n"
-                            "• **Attack Type:** {{attack_vector}}\n"
-                            "• **Attack Category:** {{attack_category}}\n"
-                            "• **Blocking Strategy:** {{blocking_strategy}}"
-                        ),
-                        "inline": False
-                    },
-                    {
-                        "name": "📁 Analysis Report",
-                        "value": "{{report_file}}",
-                        "inline": True
+                    "footer": {
+                        "text": "PaintSecure Edition - github.com/0vm/NetDeflect",
+                        "icon_url": "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
                     }
-                ],
-                "author": {
-                    "name": "NetDeflect",
-                    "icon_url": "https://avatars.githubusercontent.com/u/79897291?s=96&v=4"
-                },
-                "footer": {
-                    "text": "github.com/0vm/NetDeflect",
-                    "icon_url": "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
                 }
-            }
-        ]
-    }
+            ]
+        }
         
         with open('notification_template.json', 'w', encoding='utf-8') as f:
             json.dump(default_template, f, ensure_ascii=False, indent=4)
@@ -1559,10 +1742,40 @@ def main():
         # Exit application
         exit()
 
+    # Display banner
+    print(f"\n{TerminalColor.RED}{'='*80}{TerminalColor.RESET}")
+    print(f"{TerminalColor.BLUE}{' '*20}NETDEFLECT v2.5 - PAINTSECURE EDITION (mod by martin){' '*20}{TerminalColor.RESET}")
+    print(f"{TerminalColor.RED}{'='*80}{TerminalColor.RESET}")
+    print(f"{TerminalColor.GREEN}System IP: {TerminalColor.WHITE}{system_ip}")
+    print(f"{TerminalColor.GREEN}Interface: {TerminalColor.WHITE}{network_interface}")
+    print(f"{TerminalColor.GREEN}Firewall:  {TerminalColor.WHITE}{firewall_system}")
+    if enable_multi_firewall:
+        print(f"{TerminalColor.GREEN}Secondary: {TerminalColor.WHITE}{secondary_firewall}")
+    print(f"{TerminalColor.RED}{'='*80}{TerminalColor.RESET}\n")
+
+    # Display enabled features
+    print(f"{TerminalColor.YELLOW}Enabled Features:{TerminalColor.RESET}")
+    features = []
+    if enable_ai_analysis: features.append("AI Analysis")
+    if enable_behavioral_analysis: features.append("Behavioral Analysis")
+    if enable_pattern_detection: features.append("Pattern Detection")
+    if enable_threat_feeds: features.append("Threat Intelligence")
+    if enable_rate_limiting: features.append("Rate Limiting")
+    if enable_geo_blocking: features.append("Geo-Blocking")
+    
+    for i in range(0, len(features), 3):
+        line = features[i:i+3]
+        print(f"  {TerminalColor.CYAN}•{TerminalColor.RESET} " + f"{TerminalColor.WHITE}{' | '.join(line)}{TerminalColor.RESET}")
+    print()
+
     # Print external API status
     if enable_api_integration:
         print(f"{get_output_prefix()} {TerminalColor.GREEN}External firewall API integration enabled: {api_endpoint}{TerminalColor.RESET}")
         print(f"{get_output_prefix()} {TerminalColor.GREEN}Mode: {sending_mode} ({request_method}){TerminalColor.RESET}")
+    
+    # Initialize background systems
+    if enable_threat_feeds and threat_detector.threat_intel:
+        threading.Thread(target=threat_detector.threat_intel.update_feeds, daemon=True).start()
     
     # Main monitoring loop
     while True:
@@ -1741,16 +1954,16 @@ def main():
                     if deleted_files > 0:
                         print(f"{get_output_prefix()} {TerminalColor.BLUE}Cleaned up {deleted_files} old pcap files, keeping most recent {max_pcap_files}{TerminalColor.RESET}")
 
-
                 # Pause before next detection cycle
                 time.sleep(mitigation_pause)
                 
             except Exception as e:
                 print(f"{get_output_prefix()} Error during attack handling: {str(e)}")
                 print(f"{get_output_prefix()} Pausing before next detection cycle")
-                time.sleep(mitigation_pause),
+                time.sleep(mitigation_pause)
 
-dir()
+# Initialize directories
+setup_directories()
 
 # Load attack vectors
 if not AttackVectors.load_vectors():
@@ -1760,5 +1973,9 @@ if not AttackVectors.load_vectors():
 if firewall_system == 'ipset':
     configure_ipset()
 
+# Configure enhanced firewall
+firewall_manager.configure_firewall()
+
 # Start monitoring
-main()
+if __name__ == "__main__":
+    main()

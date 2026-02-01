@@ -1,0 +1,31 @@
+{
+    "content": null,
+    "embeds": [
+        {
+            "title": "⚠️ DDoS Attack Mitigated: #{{attack_id}}",
+            "description": "PabloSecure detected and responded to a potential attack.",
+            "url": "https://protect.pablocloud.biz.id",
+            "color": 16734296,
+            "fields": [
+                {
+                    "name": "📊 Pre-Mitigation Stats",
+                    "value": "• **Packets/s (PPS):** {{pps}}\n• **Megabits/s (Mbps):** {{mbps}}\n• **CPU Usage:** {{cpu}}",
+                    "inline": false
+                },
+                {
+                    "name": "🛡️ Post-Mitigation Results",
+                    "value": "• **Status:** {{status}}\n• **IPs Blocked:** {{block_count}}\n• **Attack Type:** {{attack_vector}}\n• **Attack Category:** {{attack_category}}\n• **Blocking Strategy:** {{blocking_strategy}}",
+                    "inline": false
+                }
+            ],
+            "author": {
+                "name": "PabloSecure",
+                "icon_url": "https://avatars.githubusercontent.com/u/79897291?s=96&v=4"
+            },
+            "footer": {
+                "text": "protect.pablocloud.biz.id",
+                "icon_url": "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+            }
+        }
+    ]
+}
